@@ -279,7 +279,7 @@ snow_fall = noaa_tidy %>%
   ggplot(aes(x = snow, y = factor(year))) +
   geom_density_ridges() +
   labs(
-    title = "Distribution of snowfall values separately by year",
+    title = "Distribution of Snowfall Values",
     x = "Snowfall (mm)",
     y = "Year"
   )
@@ -287,4 +287,6 @@ snow_fall = noaa_tidy %>%
 tmax_vs_tmin + snow_fall
 ```
 
+From the hexbin plot of tmax vs tmin, we could tell the lighter the color is, the denser. And there is an apparent linear relationship between these two variables.
 
+According to the density curves showing the distribution of snowfall values greater than 0 and less than 100 separately by year, snowfall values are more likely to fall between 0 ~ 30 mm. There are also small peaks around 52 mm and 78 mm. No apparent changed with regard to the distribution of snowfall values across years.
