@@ -89,3 +89,202 @@ instacart %>%
   spread(key = order_dow, value = mean_hour) %>%
   knitr::kable(digits = 2)
 ```
+
+
+## Problem 2
+
+#### Read in the data
+
+```{r}
+accel_df = read_csv("./data/accel_data.csv",
+                    col_types = cols(week = "i", day_id = "i"))
+
+accel_df
+
+colnames(accel_df)[ncol(accel_df)]
+```
+
+The raw dataset has `r nrow(accel_df)` rows and `r ncol(accel_df)` columns, and each row represents one single day, containing 1440 activity counts values, which is hard to read. So, we are going to transform wide to long.
+
+#### Clean, tidy, and encode
+
+```{r}
+accel_tidy = accel_df %>% 
+  janitor::clean_names() %>% 
+  pivot_longer(
+    activity_1:activity_1440,
+    names_to = "minute",
+    names_prefix = "activity_",
+    values_to = "activity_counts"
+  ) %>% 
+    mutate(
+      weekday_vs_weekend = ifelse(day %in% c("Saturday", "Sunday"), "weekend", "weekday"),
+      minute = as.integer(minute)
+      ) %>% 
+  select(week, day_id, day, weekday_vs_weekend, everything())
+
+accel_tidy
+```
+
+The resulting dataset has `r nrow(accel_df)` rows and `r ncol(accel_df)` columns. Variables include the week, day_id, day, weekday or weekend indicator, minute, and activity counts value. Each row represents the record of every minute. In total, there are `r accel_df %>% select(day_id) %>% distinct %>% count` days from `r accel_df %>% select(week) %>% distinct %>% count` weeks. 
+
+Next let's make traditional analyses of accelerometer data focus on the total activity over the day. Using the tidied dataset, aggregate across minutes to create a total activity variable for each day, and create a table showing these totals. Are any trends apparent?
+
+```{r}
+accel_tidy %>% 
+  group_by(week, day) %>% 
+  summarize(total_activity = sum(activity_counts, na.rm = TRUE)) %>% 
+  pivot_wider(
+    names_from = day,
+    values_from = total_activity
+  ) %>% 
+  knitr::kable()
+```
+
+It is apparent that most of total activity values for each day have exceeded 100,000, except the Monday in week 1, the Saturday in week 4, and the Saturday in week 5. Among them, the Monday in week 1 has total activity value near 100,000, which is 78828. But those two Saturdays both have only 1440 counts for the whole day, which is abnormal compared with other days. 
+
+Then we will make a single-panel plot that shows the 24-hour activity time courses for each day and use color to indicate day of the week. Describe in words any patterns or conclusions you can make based on this graph.
+
+```{r}
+accel_tidy %>% 
+  mutate(hour = as.integer((minute-1)/60)) %>% 
+  group_by(day_id, hour) %>% 
+  mutate(hour_activty = sum(activity_counts)) %>% 
+  group_by(day, hour) %>% 
+  summarize(avg_hour_act = mean(hour_activty)) %>% 
+  ggplot(aes(x = hour, y = avg_hour_act, color = day)) +
+  geom_path() +
+  labs(
+    x = "Hours in a Day",
+    y = "Average Activity Counts Per Hour",
+    title = "Plot of 24-hour activity time courses"
+  ) +
+  scale_x_continuous(
+    breaks = 0:23,
+    labels = c(0:23)
+  )
+```
+
+Generally, the patient has two main activity peaks within a day, which is around 10:00 ~ 11:00 in the morning and 8:00 ~ 9:00 at night respectively. The activity values tend to be zero from 23:00 to 4:00 the next day. With regard to different days, the patient has the largest morning activity counts on Sunday and has the largest evening activity counts on Friday. 
+
+
+
+## Problem 3
+
+#### Read in the data
+
+```{r}
+data("ny_noaa")
+
+ny_noaa = 
+  ny_noaa %>% 
+  as_tibble(ny_noaa)
+
+ny_noaa
+```
+
+This raw dataset contains `r nrow(ny_noaa)` rows and `r ncol(ny_noaa)` columns, with each row resprenting a single date from one single weather station. Variables include identifiers for weather station, date, precipitation, snowfall, snow depth, max and min temperature.
+
+Below is a table summarizing the number of observations collected from each weather station. In total, there are 747 weather stations, and each station has maximum 10957 observations.
+
+```{r}
+ny_noaa %>% 
+  count(id) %>% 
+  arrange(desc(n))
+```
+
+Missing data pattern:
+
+```{r}
+missing = ny_noaa %>% 
+  gather(key = "key", value = "val") %>% 
+  mutate(is_missing = is.na(val)) %>%
+  group_by(key, is_missing) %>%
+  summarize(n_obs = n()) %>% 
+  arrange(key)
+
+missing
+
+missing %>%
+  ggplot(aes(x = key, y = n_obs, fill = is_missing)) +
+  geom_bar(stat = "identity")
+```
+
+The table shows that there is no missing value for variables `date` and `id`. Missing value counts for variables `prcp`, `snow`, and `snwd` are 145838, 381221, and 591786. But for `tmax` and `tmin`, the counts are both over 1,000,000, which are near half of observations. According to the bar plot, we can see that the missing values for `tmax` and `tmin` have taken on the biggest proportion, and `prcp` has the smallest (except `date` and `id`). Just by eyeballing, the total amount of missing value (the yellow chunk) from the raw data set has taken on about one fourth of the whole record.
+
+
+#### Answer the questions
+
+* Do some data cleaning. Create separate variables for year, month, and day. Ensure observations for temperature, precipitation, and snowfall are given in reasonable units. For snowfall, what are the most commonly observed values? Why?
+
+```{r}
+noaa_tidy = ny_noaa %>%
+  janitor::clean_names() %>% 
+  mutate(
+    year = as.integer(format(as.Date(date), "%Y")),
+    month = month.name[as.integer(format(as.Date(date), "%m"))],
+    day = as.integer(format(as.Date(date), "%d")),
+    tmin = as.numeric(tmin) / 10,
+    tmax = as.numeric(tmax) / 10,
+    prcp = prcp / 10
+    )
+
+noaa_tidy
+
+noaa_tidy %>% 
+  count(snow) %>% 
+  arrange(desc(n))
+```
+
+The resulting dataset contains `r nrow(noaa_tidy)` rows and `r ncol(noaa_tidy)` columns. Variables include `id`, `date`, `prcp`(mm), `snow`(mm), `snwd`(mm), `tmax`(C), `tmin`(C), `year`, `month`, and `day`. The most commonly observed values for snowfall is 0, because for most of the days it was not snowing.
+
+* Make a two-panel plot showing the average max temperature in January and in July in each station across years. Is there any observable / interpretable structure? Any outliers?
+
+```{r}
+noaa_tidy %>% 
+  group_by(id, year, month) %>% 
+  summarize(mean_tmax = mean(tmax, na.rm = TRUE)) %>% 
+  filter(month %in% c("January", "July")) %>% 
+  ggplot(aes(x = year, y = mean_tmax, color = month)) + 
+  geom_point(alpha = .3) + 
+  geom_smooth() + 
+  labs(
+    title = "Avg Max Temp in Each Station Across Years",
+    x = "Year",
+    y = "Average Max Temperature (°C)"
+  ) +
+  scale_x_continuous(
+    breaks = c(1980, 1985, 1990, 1995, 2000, 2005, 2010)
+    ) +
+  facet_grid(. ~ month) +
+  theme(legend.position = "none")
+```
+
+In January, the average max temperature in each station appear to be between -10 to 10 Celsius across years. And we can tell that there is some floating by eyeballing the smooth curve, especially there are three peaks around 1990, 1999, and 2007. There are some outliers which are outside the average range, such as in 1982 and 2005, but not apparent.
+
+In July, the average max temperature in each station appear to be between 20 to 33 Celsius across years. The smooth curve tends to be more stable compared with January. And we can tell that there is a obvious outlier in 1988, which is around 15 Celsius. In addition, the average temperature in January are substantially lower than in July.
+
+* Make a two-panel plot showing (i) tmax vs tmin for the full dataset (note that a scatterplot may not be the best option); and (ii) make a plot showing the distribution of snowfall values greater than 0 and less than 100 separately by year.
+
+```{r}
+tmax_vs_tmin = noaa_tidy %>% 
+  ggplot(aes(x = tmin, y = tmax)) + 
+  geom_hex() +
+  labs(
+    title = "Tmax vs Tmin for the Full Dataset"
+  )
+
+snow_fall = noaa_tidy %>% 
+  filter(snow > 0 & snow <100) %>% 
+  ggplot(aes(x = snow, y = factor(year))) +
+  geom_density_ridges() +
+  labs(
+    title = "Distribution of snowfall values separately by year",
+    x = "Snowfall (mm)",
+    y = "Year"
+  )
+
+tmax_vs_tmin + snow_fall
+```
+
+
